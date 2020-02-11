@@ -1,5 +1,6 @@
-using NUnit.Framework;
 using System.Collections.Generic;
+using System.Linq;
+using NUnit.Framework;
 using TagLib;
 using TagLib.Id3v2;
 using Tag = TagLib.Id3v2.Tag;
@@ -1568,6 +1569,191 @@ namespace TaglibSharp.Tests.TaggingFormats
 				});
 		}
 
+		/// <summary>
+		/// Tests adding a frame to the Tag.
+		/// </summary>
+		[Test]
+		public void TestAddFrame ()
+		{
+			ByteVector data = val_sing;
+			data.Add (data); data.Add (data); data.Add (data);
+			data.Add (data); data.Add (data); data.Add (data);
+			data.Add (data); data.Add (data); data.Add (data);
+			data.Add (data); data.Add (data); data.Add (data);
+
+			// ASIC Frame
+			var apicFrame = new AttachmentFrame ();
+			apicFrame.MimeType = "image/png";
+			apicFrame.Description = "description";
+			apicFrame.Type = PictureType.FrontCover;
+			apicFrame.Data = data;
+
+			// GEOB Frame
+			var geobFrame = new AttachmentFrame ();
+			geobFrame.Filename = "TEST.txt";
+			geobFrame.MimeType = "text/plain";
+			geobFrame.Description = "description";
+			geobFrame.Type = PictureType.NotAPicture;
+			geobFrame.Data = data;
+
+			Tag tag;
+			for (byte version = 2; version <= 4; version++) {
+				tag = new Tag ();
+				tag.Version = version;
+
+				TagTestWithSave (ref tag, delegate (Tag t, string m) {
+					Assert.IsTrue (t.IsEmpty, "Initial (IsEmpty): " + m);
+					Assert.IsTrue (t.GetFrames ().Count () == 0, "Initial (Null): " + m);
+				});
+
+				tag.Title = val_sing;
+				tag.AddFrame (apicFrame);
+				tag.AddFrame (geobFrame);
+
+				TagTestWithSave (ref tag, delegate (Tag t, string m) {
+					Assert.AreEqual (val_sing, t.Title, "Saved (Should have 1 frames): " + m);
+					Assert.AreEqual (1, t.GetFrames ("GEOB").Count (), "Saved (Should have 1 GEOB frame): " + m);
+					Assert.AreEqual (1, t.GetFrames ("APIC").Count (), "Saved (Should have 1 APIC frame): " + m);
+				});
+
+				tag.Title = string.Empty;
+				tag.RemoveFrames ("GEOB");
+				tag.RemoveFrames ("APIC");
+
+				TagTestWithSave (ref tag, delegate (Tag t, string m) {
+					Assert.IsTrue (t.IsEmpty, "Value Cleared (IsEmpty): " + m);
+					Assert.IsTrue (0 == t.GetFrames ("GEOB").Count (), "GEOB Cleared (Null): " + m);
+					Assert.IsTrue (0 == t.GetFrames ("APIC").Count (), "GEOB Cleared (Null): " + m);
+				});
+			}
+		}
+
+		/// <summary>
+		/// Tests adding two frames to a tag, without using the TagTestWithSave method.
+		/// Trying to identify if that method is causing strange failures.
+		/// </summary>
+		[Test]
+		public void TestAddFrameWithoutTagTestWithSave ()
+		{
+			ByteVector data = val_sing;
+			data.Add (data); data.Add (data); data.Add (data);
+			data.Add (data); data.Add (data); data.Add (data);
+			data.Add (data); data.Add (data); data.Add (data);
+			data.Add (data); data.Add (data); data.Add (data);
+
+			// ASIC Frame
+			var apicFrame = new AttachmentFrame ();
+			apicFrame.MimeType = "image/png";
+			apicFrame.Description = "description";
+			apicFrame.Type = PictureType.FrontCover;
+			apicFrame.Data = data;
+
+			// GEOB Frame
+			var geobFrame = new AttachmentFrame ();
+			geobFrame.Filename = "TEST.txt";
+			geobFrame.MimeType = "text/plain";
+			geobFrame.Description = "description";
+			geobFrame.Type = PictureType.NotAPicture;
+			geobFrame.Data = data;
+
+			for (byte version = 2; version <= 4; version++) {
+				var tag = new Tag ();
+				tag.Version = version;
+
+				tag.Title = val_sing;
+				tag.AddFrame (apicFrame);
+				tag.AddFrame (geobFrame);
+
+				var t1 = new Tag (tag.Render ());
+				Assert.AreEqual (val_sing, t1.Title, "Not yet cloned.");
+				Assert.AreEqual (1, t1.GetFrames ("GEOB").Count (), "GEOB wasn't saved");
+				Assert.AreEqual (1, t1.GetFrames ("APIC").Count (), "APICwasn't saved");
+
+				var t2 = tag.Clone ();
+				Assert.AreEqual (val_sing, t2.Title, "Not yet cloned.");
+				Assert.AreEqual (1, t2.GetFrames ("GEOB").Count (), "GEOB wasn't cloned");
+				Assert.AreEqual (1, t2.GetFrames ("APIC").Count (), "APIC wasn't cloned");
+
+				var t3 = new Tag ();
+				tag.CopyTo (t3, true);
+				Assert.AreEqual (val_sing, t3.Title, "Not yet cloned.");
+				Assert.AreEqual (1, t3.GetFrames ("GEOB").Count (), "GEOB wasn't copied(true)");
+				Assert.AreEqual (1, t3.GetFrames ("APIC").Count (), "APIC wasn't copied(true)");
+
+				var t4 = new Tag ();
+				tag.CopyTo (t4, true);
+				Assert.AreEqual (val_sing, t4.Title, "Not yet cloned.");
+				Assert.AreEqual (1, t4.GetFrames ("GEOB").Count (), "GEOB wasn't copied(false)");
+				Assert.AreEqual (1, t4.GetFrames ("APIC").Count (), "APIC wasn't copied(false)");
+
+				tag.Title = string.Empty;
+				tag.RemoveFrames ("GEOB");
+				tag.RemoveFrames ("APIC");
+
+				TagTestWithSave (ref tag, delegate (Tag t, string m) {
+					Assert.IsTrue (t.IsEmpty, "Value Cleared (IsEmpty): " + m);
+					Assert.IsTrue (0 == t.GetFrames ("GEOB").Count (), "GEOB Cleared (Null): " + m);
+					Assert.IsTrue (0 == t.GetFrames ("APIC").Count (), "APIC Cleared (Null): " + m);
+				});
+			}
+		}
+
+		[Test]
+		public void TestAddFrameNotByRef ()
+		{
+			ByteVector data = val_sing;
+			data.Add (data); data.Add (data); data.Add (data);
+			data.Add (data); data.Add (data); data.Add (data);
+			data.Add (data); data.Add (data); data.Add (data);
+			data.Add (data); data.Add (data); data.Add (data);
+
+			// ASIC Frame
+			var apicFrame = new AttachmentFrame ();
+			apicFrame.MimeType = "image/png";
+			apicFrame.Description = "description";
+			apicFrame.Type = PictureType.FrontCover;
+			apicFrame.Data = data;
+
+			// GEOB Frame
+			var geobFrame = new AttachmentFrame ();
+			geobFrame.Filename = "TEST.txt";
+			geobFrame.MimeType = "text/plain";
+			geobFrame.Description = "description";
+			geobFrame.Type = PictureType.NotAPicture;
+			geobFrame.Data = data;
+
+			Tag tag;
+			for (byte version = 2; version <= 4; version++) {
+				tag = new Tag ();
+				tag.Version = version;
+
+				TagTestWithSaveNotByRef (tag, delegate (Tag t, string m) {
+					Assert.IsTrue (t.IsEmpty, "Initial (IsEmpty): " + m);
+					Assert.IsTrue (t.GetFrames ().Count () == 0, "Initial (Null): " + m);
+				});
+
+				tag.Title = val_sing;
+				tag.AddFrame (apicFrame);
+				tag.AddFrame (geobFrame);
+
+				TagTestWithSaveNotByRef (tag, delegate (Tag t, string m) {
+					Assert.AreEqual (val_sing, t.Title, "Saved (Should have 1 frames): " + m);
+					Assert.AreEqual (1, t.GetFrames ("GEOB").Count (), "Saved (Should have 1 GEOB frame): " + m);
+					Assert.AreEqual (1, t.GetFrames ("APIC").Count (), "Saved (Should have 1 APIC frame): " + m);
+				});
+
+				tag.Title = string.Empty;
+				tag.RemoveFrames ("GEOB");
+				tag.RemoveFrames ("APIC");
+
+				TagTestWithSaveNotByRef (tag, delegate (Tag t, string m) {
+					Assert.IsTrue (t.IsEmpty, "Value Cleared (IsEmpty): " + m);
+					Assert.IsTrue (0 == t.GetFrames ("GEOB").Count (), "GEOB Cleared (Null): " + m);
+					Assert.IsTrue (0 == t.GetFrames ("APIC").Count (), "GEOB Cleared (Null): " + m);
+				});
+			}
+		}
+
 		delegate void TagTestFunc (Tag tag, string msg);
 
 		void TagTestWithSave (ref Tag tag, TagTestFunc testFunc)
@@ -1587,6 +1773,31 @@ namespace TaglibSharp.Tests.TaggingFormats
 				tag.CopyTo (tmp, false);
 				tag = tmp;
 				testFunc (tag, "After CopyTo(false), Version: " + version);
+			}
+		}
+
+		/// <summary>
+		/// This is a modified version of the TagTestFunc, but removes the byref nature.
+		/// </summary>
+		void TagTestWithSaveNotByRef (Tag tag, TagTestFunc testFunc)
+		{
+			testFunc (tag, "Before Save");
+			for (byte version = 2; version <= 4; version++) {
+				tag.Version = version;
+
+				var tmp1 = new Tag (tag.Render ());
+				testFunc (tmp1, "After Save, Version: " + version);
+
+				var tmp2 = tag.Clone ();
+				testFunc (tmp2, "After Clone, Version: " + version);
+
+				var tmp3 = new Tag ();
+				tag.CopyTo (tmp3, true);
+				testFunc (tmp3, "After CopyTo(true), Version: " + version);
+
+				var tmp4 = new Tag ();
+				tag.CopyTo (tmp4, false);
+				testFunc (tmp4, "After CopyTo(false), Version: " + version);
 			}
 		}
 
