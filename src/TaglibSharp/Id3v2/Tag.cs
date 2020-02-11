@@ -2294,11 +2294,11 @@ namespace TagLib.Id3v2
 		/// </remarks>
 		public override IPicture[] Pictures {
 			get {
-				return new List<AttachmentFrame> (GetFrames<AttachmentFrame> ()).ToArray ();
+				return new List<AttachmentFrame> (GetFrames<AttachmentFrame> ("APIC")).ToArray ();
 			}
 			set {
 				RemoveFrames (FrameType.APIC);
-				RemoveFrames (FrameType.GEOB);
+				//RemoveFrames (FrameType.GEOB);
 
 				if (value == null || value.Length == 0)
 					return;

@@ -1,5 +1,6 @@
 using NUnit.Framework;
 using System.Collections.Generic;
+using System.Linq;
 using TagLib;
 using TagLib.Id3v2;
 using Tag = TagLib.Id3v2.Tag;
@@ -1568,6 +1569,121 @@ namespace TaglibSharp.Tests.TaggingFormats
 				});
 		}
 
+		[Test]
+		public void TestGeobNotReturnedWithPictures ()
+		{
+			// Create a tag with 2 frames
+			// 1 picture and 1 GEOB
+
+			// single red dot (1x1 px red image) APIC frame found in wild
+			var redDot = new byte[] { 65, 80, 73, 67, 0, 0, 0, 155, 0, 0, 0, 105, 109, 97, 103, 101, 47, 112, 110, 103, 0, 3, 0, 137, 80, 78,
+				71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 0, 0, 0, 144, 119, 83, 222, 0, 0, 0, 4, 103, 65,
+				77, 65, 0, 0, 177, 143, 11, 252, 97, 5, 0, 0, 0, 9, 112, 72, 89, 115, 0, 0, 11, 18, 0, 0, 11, 18, 1, 210, 221, 126, 252, 0, 0, 0,
+				24, 116, 69, 88, 116, 83, 111, 102, 116, 119, 97, 114, 101, 0, 112, 97, 105, 110, 116, 46, 110, 101, 116, 32, 52, 46, 49, 46, 53,
+				100, 71, 88, 82, 0, 0, 0, 12, 73, 68, 65, 84, 24, 87, 99, 248, 47, 162, 0, 0, 3, 73, 1, 52, 163, 224, 5, 179, 0, 0, 0, 0, 73, 69,
+				78, 68, 174, 66, 96, 130 };
+			var pictureFrame = new AttachmentFrame (redDot, 3);
+
+			var geobFrame = new AttachmentFrame ();
+			geobFrame.MimeType = "application/octet-stream";
+			geobFrame.Description = "random";
+			geobFrame.Type = PictureType.NotAPicture;
+			geobFrame.Data = val_sing;
+
+			Tag tag = new Tag ();
+
+			for (byte version = 2; version <= 4; version++) {
+				tag.Version = version;
+
+				TagTestWithSave (ref tag, delegate (Tag t, string m) {
+					Assert.IsTrue (t.IsEmpty, "Initial (IsEmpty): " + m);
+					Assert.IsTrue (t.Pictures.Length == 0, "Initial (Null): " + m);
+				});
+
+				tag.AddFrame (pictureFrame);
+				tag.AddFrame (geobFrame);
+
+				TagTestWithSave2 (tag, delegate (Tag t, string m) {
+					Assert.IsTrue (1 == t.GetFrames ("GEOB").Count (), "Saved (Should have 1 GEOB): " + m);
+					Assert.IsTrue (1 == t.Pictures.Length, "Saved (Should have 1 Picture): " + m);
+				});
+
+				tag.RemoveFrames ("APIC");
+				tag.RemoveFrames ("GEOB");
+
+				TagTestWithSave2 (tag, delegate (Tag t, string m) {
+					Assert.IsTrue (t.IsEmpty, "Value Cleared (IsEmpty): " + m);
+					Assert.IsTrue (0 == t.GetFrames ("GEOB").Count (), "GEOB Cleared (Null): " + m);
+					Assert.IsTrue (0 == t.Pictures.Length, "APIC Cleared (Null):" + m);
+				});
+			}
+		}
+
+		/// <summary>
+		/// Test demonstrates bug # XXXX. Setting ID3v2.Pictures removes all GEOB frames
+		/// </summary>
+		[Test]
+		public void TestSettingPictureDoesntRemoveGeob ()
+		{
+			// GEOB frame of ID3V2 tag in the wild
+			var wildGeob = new byte[] { 71, 69, 79, 66, 0, 0, 0, 62, 0, 0, 0, 97, 112, 112, 108, 105, 99, 97, 116, 105, 111, 110, 47, 111, 99, 116, 101, 116, 45, 115, 116, 114, 101, 97, 109, 0, 0, 83, 101, 114, 97, 116, 111, 32, 65, 117, 116, 111, 116, 97, 103, 115, 0, 1, 1, 48, 46, 48, 48, 0, 48, 46, 50, 57, 54, 0, 48, 46, 48, 48, 48, 0 };
+			var geobFrame = new AttachmentFrame (wildGeob, 3);
+
+			// Construct the picture attachment... we will use it below
+			var pictureFrame = new AttachmentFrame ();
+			pictureFrame.MimeType = "image/png";
+			pictureFrame.Description = "description";
+			pictureFrame.Type = PictureType.FrontCover;
+
+			ByteVector data = val_sing;
+			data.Add (data); data.Add (data); data.Add (data);
+			data.Add (data); data.Add (data); data.Add (data);
+			data.Add (data); data.Add (data); data.Add (data);
+			data.Add (data); data.Add (data); data.Add (data);
+
+			pictureFrame.Data = data;
+
+			Tag tag;
+			for (byte version = 2; version <= 4; version++) {
+				tag = new Tag ();
+				tag.Version = version;
+
+				TagTestWithSave2 (tag, delegate (Tag t, string m) {
+					Assert.IsTrue (t.IsEmpty, "Initial (IsEmpty): " + m);
+					Assert.IsTrue (t.Pictures.Length == 0, "Initial (Null): " + m);
+					Assert.IsTrue (t.GetFrames ().Count () == 0, "Initial (Null): " + m);
+				});
+
+				tag.AddFrame (geobFrame);
+
+				TagTestWithSave2 (tag, delegate (Tag t, string m) {
+					Assert.AreEqual (1, t.GetFrames ().Count (), "Value set (Should have 1 frames): " + m);
+					Assert.AreEqual (0, t.Pictures.Length, "Value set (Should have 0 Picture): " + m);
+					Assert.AreEqual (0, t.GetFrames ("APIC").Count (), "Value set (Should have 0 APIC frame): " + m);
+					Assert.AreEqual (1, t.GetFrames ("GEOB").Count (), "Value set (Should have 1 GEOB frame): " + m);
+				});
+
+				// Now set a picture. Note, I don't want to remove any GEOB frames, I just want to set a picture.
+				tag.Pictures = new[] { pictureFrame };
+
+				TagTestWithSave2 (tag, delegate (Tag t, string m) {
+					Assert.AreEqual (2, t.GetFrames ().Count (), "Value set (Should have 2 frames): " + m);
+					Assert.AreEqual (1, t.Pictures.Length, "Value set (Should have 1 Picture): " + m);
+					Assert.AreEqual (1, t.GetFrames ("APIC").Count (), "Value set (Should have 1 APIC frame): " + m);
+					Assert.AreEqual (1, t.GetFrames ("GEOB").Count (), "Value set (Should have 1 GEOB frame): " + m);
+				});
+
+				tag.RemoveFrames ("GEOB");
+				tag.RemoveFrames ("APIC");
+
+				TagTestWithSave2 (tag, delegate (Tag t, string m) {
+					Assert.IsTrue (t.IsEmpty, "Cleared (IsEmpty): " + m);
+					Assert.AreEqual (0, t.GetFrames ("GEOB").Count (), "Cleared GEOB (Null): " + m);
+					Assert.AreEqual (0, t.GetFrames ("APIC").Count (), "Cleared APIC (Null): " + m);
+				});
+			}
+		}
+
 		delegate void TagTestFunc (Tag tag, string msg);
 
 		void TagTestWithSave (ref Tag tag, TagTestFunc testFunc)
@@ -1587,6 +1703,28 @@ namespace TaglibSharp.Tests.TaggingFormats
 				tag.CopyTo (tmp, false);
 				tag = tmp;
 				testFunc (tag, "After CopyTo(false), Version: " + version);
+			}
+		}
+
+		void TagTestWithSave2 (Tag tag, TagTestFunc testFunc)
+		{
+			testFunc (tag, "Before Save");
+			for (byte version = 2; version <= 4; version++) {
+				tag.Version = version;
+
+				var tmp1 = new Tag (tag.Render ());
+				testFunc (tmp1, "After Save, Version: " + version);
+
+				var tmp2 = tag.Clone ();
+				testFunc (tmp2, "After Clone, Version: " + version);
+
+				var tmp3 = new Tag ();
+				tag.CopyTo (tmp3, true);
+				testFunc (tmp3, "After CopyTo(true), Version: " + version);
+
+				var tmp4 = new Tag ();
+				tag.CopyTo (tmp4, false);
+				testFunc (tmp4, "After CopyTo(false), Version: " + version);
 			}
 		}
 
